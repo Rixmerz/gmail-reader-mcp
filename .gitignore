@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+# The browser profile and downloads live in ~/.gmail-reader-mcp, never in the repo
+profile/
+downloads/
+.DS_Store

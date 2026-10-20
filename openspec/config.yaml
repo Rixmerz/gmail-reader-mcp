@@ -1,0 +1,9 @@
+schema: spec-driven
+
+context: |
+  gmail-reader-mcp is a read-only Gmail MCP server (stdio, JSON-RPC).
+  Tech stack: Python >= 3.10, standard library only; Chrome, Chromium, Edge or Brave
+  driven through the Chrome DevTools Protocol with a small WebSocket client of its own.
+  Runs on macOS, Windows and Linux. Conventional commits, in English.
+  Domain: reading a user's own Gmail through the web page of a browser profile they
+  signed in to by hand; never sending, replying, archiving, deleting or marking mail.
