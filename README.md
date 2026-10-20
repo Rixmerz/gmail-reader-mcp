@@ -9,14 +9,29 @@ A **read-only** Gmail MCP server. It keeps a browser profile of its own: you sig
 
 ## Install
 
-macOS and Linux:
+As a Claude Code plugin, from the [Rixmerz marketplace](https://github.com/Rixmerz/claude-plugins):
+
+```
+/plugin install gmail-reader --marketplace Rixmerz/claude-plugins
+```
+
+or from a terminal:
+
+```sh
+claude plugin marketplace add Rixmerz/claude-plugins
+claude plugin install gmail-reader@rixmerz
+```
+
+The plugin starts the server with `python3`. That exists on macOS and Linux, and on Windows when Python comes from the Python Install Manager or the Microsoft Store; with another Windows install, register the server by hand as below.
+
+By hand, on macOS and Linux:
 
 ```bash
 git clone https://github.com/Rixmerz/gmail-reader-mcp.git ~/gmail-reader-mcp
 claude mcp add --scope user gmail-reader -- python3 ~/gmail-reader-mcp/server.py
 ```
 
-Windows (PowerShell):
+By hand, on Windows (PowerShell):
 
 ```powershell
 git clone https://github.com/Rixmerz/gmail-reader-mcp.git $HOME\gmail-reader-mcp
@@ -95,6 +110,7 @@ The behaviour is specified with [OpenSpec](https://github.com/Fission-AI/OpenSpe
 | `cdp.py` | Minimal WebSocket and Chrome DevTools Protocol client |
 | `tests/` | `python3 -m unittest discover -s tests` (no browser) and `python3 tests/smoke_browser.py` (real browser, no account) |
 | `openspec/` | Specs and the archived change that introduced them |
+| `.claude-plugin/plugin.json` | The Claude Code plugin: starts `server.py` as the `gmail-reader` MCP server |
 | `.github/workflows/ci.yml` | Both checks on macOS, Windows and Linux, with Python 3.10 and 3.13 |
 
 ## License
