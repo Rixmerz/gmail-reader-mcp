@@ -113,6 +113,7 @@ The behaviour is specified with [OpenSpec](https://github.com/Fission-AI/OpenSpe
 | `tests/` | `python3 -m unittest discover -s tests` (no browser) and `python3 tests/smoke_browser.py` (real browser, no account) |
 | `openspec/` | Specs and the archived change that introduced them |
 | `.claude-plugin/plugin.json` | The Claude Code plugin: starts `server.py` as the `gmail-reader` MCP server |
+| `CHANGELOG.md` | What changed in each version |
 | `.github/workflows/ci.yml` | Both checks on macOS, Windows and Linux, with Python 3.10 and 3.13 |
 
 ## License
