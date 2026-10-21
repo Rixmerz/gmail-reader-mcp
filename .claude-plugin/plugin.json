@@ -1,18 +1,35 @@
 {
   "name": "gmail-reader",
-  "version": "0.1.0",
-  "description": "Read-only Gmail for Claude: sign in once in a normal browser window, then list, search and read whole conversations with their attachments headless through the same profile. Nothing can be sent, deleted or marked as read. Python standard library only; macOS, Windows and Linux.",
+  "version": "0.2.0",
+  "description": "Read-only Gmail for Claude: sign in once in a normal browser window, then list, search and read whole conversations with their attachments headless through the same profile. Nothing can be sent or deleted; marking what it reads as read is an option you turn on. Python standard library only; macOS, Windows and Linux.",
   "author": {
     "name": "Rixmerz"
   },
   "homepage": "https://github.com/Rixmerz/gmail-reader-mcp",
   "repository": "https://github.com/Rixmerz/gmail-reader-mcp",
   "license": "MIT",
-  "keywords": ["mcp", "gmail", "email", "read-only", "chrome", "cdp"],
+  "keywords": [
+    "mcp",
+    "gmail",
+    "email",
+    "read-only",
+    "chrome",
+    "cdp"
+  ],
+  "userConfig": {
+    "mark_read": {
+      "type": "boolean",
+      "title": "Mark conversations as read",
+      "description": "Off: reading never changes your mailbox, every conversation stays as it was. On: gmail_read gains a mark_read flag, and when you ask Claude to mark what it read, it opens that conversation in Gmail, which marks it read. That is the only change the plugin can ever make.",
+      "default": false
+    }
+  },
   "mcpServers": {
     "gmail-reader": {
       "command": "python3",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/server.py"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/server.py"
+      ]
     }
   }
 }

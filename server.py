@@ -17,14 +17,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import browser  # noqa: E402
 from cdp import CDPError  # noqa: E402
+import gmail  # noqa: E402
 from gmail import Gmail, GmailError  # noqa: E402
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 INSTRUCTIONS = (
     "Read-only access to the user's Gmail through a browser profile they signed in to by hand. "
-    "These tools list, search and read mail; none of them sends, replies, archives, deletes or marks anything. "
+    "These tools list, search and read mail; none of them sends, replies, archives or deletes anything. "
     "If the profile is not signed in, call gmail_login and let the user sign in."
 )
+MARK_READ_NOTE = ("The user turned on marking as read: gmail_read with mark_read true marks the conversation read in Gmail "
+                  "after reading it; that is the only change these tools can make. Use it only when the user asks.")
 
 TOOLS = [
     {"name": "gmail_login",
@@ -61,6 +64,21 @@ TOOLS = [
          "attachments": {"type": "boolean", "default": True, "description": "false to list attachments without saving them."}}},
      "annotations": {"readOnlyHint": True, "openWorldHint": False}},
 ]
+MARK_READ_PARAM = {"type": "boolean", "default": False,
+                   "description": "true to mark the conversation as read in Gmail after reading it. Only when the user asks."}
+
+
+def tools(mark_read: bool = gmail.MARK_READ) -> list[dict]:
+    """The tool list; gmail_read takes mark_read only when the user turned that option on."""
+    if not mark_read:
+        return TOOLS
+    out = json.loads(json.dumps(TOOLS))
+    read = next(t for t in out if t["name"] == "gmail_read")
+    read["inputSchema"]["properties"]["mark_read"] = MARK_READ_PARAM
+    read["description"] = read["description"].replace("Nothing is marked as read.",
+                                                      "Nothing is marked as read unless mark_read is true.")
+    read["annotations"] = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
+    return out
 
 
 class Server:
@@ -90,7 +108,8 @@ class Server:
             limit = max(1, min(50, int(args.get("limit") or 15)))
             return self.gmail.inbox(str(args.get("search") or ""), bool(args.get("unread")), limit, args.get("account"))
         if name == "gmail_read":
-            return self.gmail.read(int(args["number"]), args.get("attachments", True) is not False)
+            return self.gmail.read(int(args["number"]), args.get("attachments", True) is not False,
+                                   gmail.MARK_READ and args.get("mark_read") is True)
         raise GmailError(f"There is no tool named {name}.")
 
     def handle(self, req: dict):
@@ -100,9 +119,9 @@ class Server:
             return {"protocolVersion": params.get("protocolVersion", "2024-11-05"),
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "gmail-reader", "version": VERSION},
-                    "instructions": INSTRUCTIONS}
+                    "instructions": INSTRUCTIONS + (" " + MARK_READ_NOTE if gmail.MARK_READ else "")}
         if method == "tools/list":
-            return {"tools": TOOLS}
+            return {"tools": tools()}
         if method == "tools/call":
             try:
                 text, err = self.call(params.get("name", ""), params.get("arguments") or {}), False

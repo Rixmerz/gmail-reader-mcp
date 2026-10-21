@@ -182,6 +182,24 @@ class TestPlatforms(unittest.TestCase):
         self.assertFalse(browser.profile_busy(profile))  # a stale one is removed
 
 
+class TestMarkRead(unittest.TestCase):
+    def test_off_unless_the_user_turns_it_on(self):
+        self.assertFalse(gmail.mark_read_enabled({}))
+        self.assertFalse(gmail.mark_read_enabled({"CLAUDE_PLUGIN_OPTION_MARK_READ": "false"}))
+        self.assertTrue(gmail.mark_read_enabled({"CLAUDE_PLUGIN_OPTION_MARK_READ": "true"}))
+        self.assertTrue(gmail.mark_read_enabled({"GMAIL_MCP_MARK_READ": "1"}))
+
+    def test_the_flag_exists_only_when_on(self):
+        import server
+        read_off = next(t for t in server.tools(False) if t["name"] == "gmail_read")
+        read_on = next(t for t in server.tools(True) if t["name"] == "gmail_read")
+        self.assertNotIn("mark_read", read_off["inputSchema"]["properties"])
+        self.assertTrue(read_off["annotations"]["readOnlyHint"])
+        self.assertIn("mark_read", read_on["inputSchema"]["properties"])
+        self.assertFalse(read_on["annotations"]["readOnlyHint"])
+        self.assertNotIn("mark_read", read_off["inputSchema"]["properties"])  # building the "on" list changed nothing
+
+
 class TestAccounts(unittest.TestCase):
     ACCOUNTS = [{"index": 0, "address": "me@example.com"}, {"index": 1, "address": "work@example.org"}]
 
@@ -206,23 +224,34 @@ class TestAccounts(unittest.TestCase):
 
 
 class TestMcp(unittest.TestCase):
-    def test_handshake_and_tools(self):
-        reqs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
-                {"jsonrpc": "2.0", "method": "notifications/initialized"},
-                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-                {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "gmail_send", "arguments": {}}},
-                {"jsonrpc": "2.0", "id": 4, "method": "nope"}]
-        env = {**os.environ, "GMAIL_MCP_HOME": tempfile.mkdtemp()}
+    def run_server(self, reqs, **env_extra):
+        env = {k: v for k, v in os.environ.items() if k not in ("GMAIL_MCP_MARK_READ", "CLAUDE_PLUGIN_OPTION_MARK_READ")}
+        env.update(GMAIL_MCP_HOME=tempfile.mkdtemp(), **env_extra)
         self.addCleanup(shutil.rmtree, env["GMAIL_MCP_HOME"])
         p = subprocess.run([sys.executable, str(REPO / "server.py")], input="\n".join(json.dumps(r) for r in reqs) + "\n",
                            capture_output=True, text=True, encoding="utf-8", timeout=30, env=env)
-        out = [json.loads(line) for line in p.stdout.splitlines()]
+        return [json.loads(line) for line in p.stdout.splitlines()]
+
+    def test_handshake_and_tools(self):
+        out = self.run_server([{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+                               {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                               {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+                               {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "gmail_send", "arguments": {}}},
+                               {"jsonrpc": "2.0", "id": 4, "method": "nope"}])
         self.assertEqual([m["id"] for m in out], [1, 2, 3, 4])
         self.assertEqual(out[0]["result"]["serverInfo"]["name"], "gmail-reader")
-        names = {t["name"] for t in out[1]["result"]["tools"]}
-        self.assertEqual(names, {"gmail_login", "gmail_accounts", "gmail_inbox", "gmail_read"})
+        tools = {t["name"]: t for t in out[1]["result"]["tools"]}
+        self.assertEqual(set(tools), {"gmail_login", "gmail_accounts", "gmail_inbox", "gmail_read"})
+        self.assertNotIn("mark_read", tools["gmail_read"]["inputSchema"]["properties"])
         self.assertTrue(out[2]["result"]["isError"])  # there is no way to send
         self.assertEqual(out[3]["error"]["code"], -32601)
+
+    def test_plugin_option_adds_mark_read(self):
+        out = self.run_server([{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                               {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}], CLAUDE_PLUGIN_OPTION_MARK_READ="true")
+        self.assertIn("marking as read", out[0]["result"]["instructions"])
+        read = next(t for t in out[1]["result"]["tools"] if t["name"] == "gmail_read")
+        self.assertIn("mark_read", read["inputSchema"]["properties"])
 
 
 if __name__ == "__main__":

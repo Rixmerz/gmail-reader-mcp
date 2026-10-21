@@ -1,6 +1,6 @@
 # gmail-reader-mcp
 
-A **read-only** Gmail MCP server. It keeps a browser profile of its own: you sign in by hand once, in a normal window, and from then on the server reuses that same profile headless to list, search and read mail.
+A **read-only** Gmail MCP server (marking what it reads as read is an option you turn on). It keeps a browser profile of its own: you sign in by hand once, in a normal window, and from then on the server reuses that same profile headless to list, search and read mail.
 
 - No Google API, no OAuth, no app passwords: credentials never leave the browser profile.
 - No dependencies: Python ≥ 3.10 (standard library only) and Chrome, Chromium, Edge or Brave. It talks to the browser over the Chrome DevTools Protocol with a WebSocket client of its own.
@@ -22,7 +22,7 @@ claude plugin marketplace add Rixmerz/claude-plugins
 claude plugin install gmail-reader@rixmerz
 ```
 
-The plugin starts the server with `python3`. That exists on macOS and Linux, and on Windows when Python comes from the Python Install Manager or the Microsoft Store; with another Windows install, register the server by hand as below.
+When the plugin is enabled, Claude Code asks whether to **mark conversations as read** (off by default; change it later in `/plugin`). The plugin starts the server with `python3`. That exists on macOS and Linux, and on Windows when Python comes from the Python Install Manager or the Microsoft Store; with another Windows install, register the server by hand as below.
 
 By hand, on macOS and Linux:
 
@@ -66,15 +66,16 @@ Cookies are stored the same way for the window and for headless mode: with Chrom
 | `gmail_login` | Opens the normal sign-in window on the server's profile and returns at once |
 | `gmail_accounts` | The signed-in accounts and the unread count of each inbox |
 | `gmail_inbox` | A numbered list of conversations: the inbox or a search in Gmail syntax (`from:`, `subject:`, `has:attachment`, `after:`…), optionally unread only |
-| `gmail_read` | Reads a whole conversation of the last list by its number: every message, oldest first, with sender, recipients, date and text (without repeating what each reply quotes), and saves the attachments of every message to disk |
+| `gmail_read` | Reads a whole conversation of the last list by its number: every message, oldest first, with sender, recipients, date and text (without repeating what each reply quotes), and saves the attachments of every message to disk. With the mark-as-read option on, it also takes `mark_read` |
 
-There is no tool that sends, replies, archives, deletes or marks mail.
+There is no tool that sends, replies, archives or deletes mail.
 
 ## How it stays read-only
 
 1. **By construction.** The code only navigates to Gmail URLs and evaluates fixed scripts that read the page; it never clicks or types. All that comes from the model is the search text, which goes URL-encoded into the address hash, and parameters, which are declared as JSON literals, never as code.
 2. **Reading marks nothing as read.** The list is read from the visible rows without opening conversations. A conversation comes from Gmail's print view (`view=pt`), which holds every message of the thread, and the browser downloads each attachment with the session's cookies. Gmail enforces Trusted Types: the server creates a `gmail-reader-mcp` policy only to hand that HTML to an inert `DOMParser` document, which runs no scripts.
-3. **Write guard.** Every request of the headless browser goes through CDP `Fetch`: any POST/PUT/PATCH/DELETE to a host other than `mail.google.com` is failed before it leaves. Gmail needs POSTs to its own host to load and search, so the guard cannot be total; the real guarantee is point 1.
+3. **Marking as read only if you allow it.** It is off by default. Turn it on with the plugin's `mark_read` option or `GMAIL_MCP_MARK_READ=1`; only then does `gmail_read` offer `mark_read`, and with it true the server opens the conversation in Gmail's interface (by URL, without clicking), which marks it read. While the option is off, a `mark_read` sent anyway is ignored. This is the only change the server can make to the mailbox.
+4. **Write guard.** Every request of the headless browser goes through CDP `Fetch`: any POST/PUT/PATCH/DELETE to a host other than `mail.google.com` is failed before it leaves. Gmail needs POSTs to its own host to load and search, so the guard cannot be total; the real guarantee is point 1.
 
 ## Configuration
 
@@ -85,6 +86,7 @@ There is no tool that sends, replies, archives, deletes or marks mail.
 | `GMAIL_MCP_DOWNLOADS` | `$GMAIL_MCP_HOME/downloads` | Where attachments are saved (`<account>/<date>-<conversation>/<message number>-<file>`) |
 | `GMAIL_MCP_ACCOUNTS` | (all) | Comma-separated addresses that may be read |
 | `GMAIL_MCP_BROWSER` | the first one found | Chrome, Chromium, Edge or Brave executable |
+| `GMAIL_MCP_MARK_READ` | off | `1` lets `gmail_read` mark conversations as read (the plugin's `mark_read` option sets the same) |
 | `GMAIL_MCP_MAX_MB` | `25` | Largest attachment saved |
 | `GMAIL_MCP_BODY_CHARS` | `6000` | Longest text of each message |
 | `GMAIL_MCP_THREAD_CHARS` | `30000` | Longest text of a whole conversation; past it, attachments are still listed |

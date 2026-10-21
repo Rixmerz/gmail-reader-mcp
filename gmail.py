@@ -5,7 +5,9 @@ Listing reads the visible rows of Gmail's list (the inbox, or a search with
 Gmail's syntax). Reading takes the whole conversation from Gmail's print view,
 which holds every message of the thread with its attachments, and the browser
 downloads each attachment; nothing is opened in the interface and nothing is
-marked as read. There is no code here that clicks, types or sends.
+marked as read, unless the user turned marking as read on and the model asks
+for it, which opens the conversation by URL. There is no code here that clicks,
+types or sends.
 """
 from __future__ import annotations
 
@@ -29,6 +31,16 @@ MAX_BYTES = int(os.environ.get("GMAIL_MCP_MAX_MB", "25")) * 1024 * 1024
 BODY_CAP = int(os.environ.get("GMAIL_MCP_BODY_CHARS", "6000"))  # per message
 THREAD_CAP = int(os.environ.get("GMAIL_MCP_THREAD_CHARS", "30000"))  # the whole conversation
 ONLY = {a.strip().lower() for a in os.environ.get("GMAIL_MCP_ACCOUNTS", "").split(",") if a.strip()}
+
+
+def mark_read_enabled(env=os.environ) -> bool:
+    """Marking as read is the one change to the mailbox, and only the user turns it on: the plugin's mark_read option
+    (CLAUDE_PLUGIN_OPTION_MARK_READ) or GMAIL_MCP_MARK_READ. The model can never enable it."""
+    value = env.get("GMAIL_MCP_MARK_READ") or env.get("CLAUDE_PLUGIN_OPTION_MARK_READ") or ""
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+MARK_READ = mark_read_enabled()
 MAX_ACCOUNTS = 10
 TINY_INLINE = 15 * 1024  # pictures in the body below this are signatures and logos, not content
 HEX_ID = re.compile(r"[0-9a-f]{6,24}")
@@ -172,6 +184,16 @@ THREAD = r"""
 """
 
 
+OPENED = r"""
+  for (let i = 0; i < 40; i++) {
+    const h = document.querySelector('div[role="main"] h2');
+    if (h && h.offsetParent !== null) return true;
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return false;
+"""
+
+
 # ---------------------------------------------------------------- formatting (no browser)
 
 def html_to_text(body: str) -> str:
@@ -288,7 +310,7 @@ class Gmail:
                        "Nothing was marked as read.")
         return "\n".join(out)
 
-    def read(self, number: int, attachments: bool = True) -> str:
+    def read(self, number: int, attachments: bool = True, mark_read: bool = False) -> str:
         listing = self.listing
         if not listing:
             raise GmailError(f"There is no list yet. {LIST_FIRST}")
@@ -307,7 +329,20 @@ class Gmail:
         folder = DOWNLOADS / safe(listing["address"]) / f"{datetime.now().astimezone():%Y%m%d}-{thread_id}"
         for i, m in enumerate(thread["messages"], 1):
             self._save(cdp, m, folder, f"{i}-", attachments)
-        return render(listing["address"], number, thread)
+        out = render(listing["address"], number, thread)
+        if mark_read and MARK_READ:
+            self._open(cdp, listing["index"], thread_id)
+            out = out.replace("Nothing was marked as read.", "Marked as read.", 1)
+        return out
+
+    def _open(self, cdp: CDP, index: int, thread_id: str) -> None:
+        """Open the conversation in Gmail's interface, which marks it read. Gmail only does so in a focused page."""
+        cdp.call("Emulation.setFocusEmulationEnabled", {"enabled": True})
+        cdp.call("Page.bringToFront")
+        goto(cdp, f"{BASE}/mail/u/{index}/#all/{thread_id}")
+        if not evaluate(cdp, page(OPENED), timeout=30):
+            raise GmailError("Gmail did not open that conversation, so it was not marked as read. Tell the user.")
+        time.sleep(3)  # Gmail sends the read state a moment after the conversation shows
 
     def _save(self, cdp: CDP, message: dict, folder: Path, prefix: str, attachments: bool) -> None:
         """Download a message's attachments (and the larger pictures in its body) into `folder`, noting each outcome."""
@@ -337,4 +372,4 @@ class Gmail:
         message["files"] = kept
 
 
-__all__ = ["Gmail", "GmailError", "BrowserError", "html_to_text", "render", "choose", "search_hash", "safe"]
+__all__ = ["Gmail", "GmailError", "BrowserError", "html_to_text", "render", "choose", "search_hash", "safe", "mark_read_enabled"]
